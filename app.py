@@ -1,93 +1,51 @@
 import pandas as pd
 import streamlit as st
+from openai import OpenAI
 
 st.set_page_config(page_title="TRINDADE IA ANALYTICS", layout="wide")
 
 st.title("🚀 TRINDADE IA ANALYTICS")
-st.subheader("Dashboard Inteligente de Operações")
+st.caption("IA de Análise Operacional")
+
+# IA
+client = None
+try:
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+except:
+    pass
 
 arquivo = st.file_uploader("📂 Envie sua planilha", type=["xlsx"])
 
 if arquivo:
     df = pd.read_excel(arquivo)
 
-    st.divider()
-
-    # Mostrar dados
-    st.subheader("📊 Visualização dos Dados")
+    st.subheader("📊 Dados")
     st.dataframe(df)
 
-    # Detectar colunas automaticamente
-    def find_col(possiveis):
-        for col in df.columns:
-            for p in possiveis:
-                if p.lower() in col.lower():
-                    return col
-        return None
-
-    col_exec = find_col(["executado"])
-    col_pend = find_col(["pendente"])
-    col_improd = find_col(["improdutivo"])
-    col_tecnico = find_col(["tecnico", "funcionario", "nome"])
-    col_prod = find_col(["prod", "produção"])
+    # KPIs simples
+    total = df.select_dtypes(include='number').sum().sum()
+    st.metric("📊 Total geral", total)
 
     st.divider()
 
-    # KPIs
-    st.subheader("📈 Indicadores")
+    # IA
+    st.subheader("🤖 Assistente Inteligente")
 
-    if col_exec and col_pend and col_improd:
-        total_exec = df[col_exec].sum()
-        total_pend = df[col_pend].sum()
-        total_improd = df[col_improd].sum()
+    pergunta = st.text_input("Faça uma pergunta sobre os dados:")
 
-        eficiencia = (total_exec / (total_exec + total_pend + total_improd)) * 100
+    if pergunta:
+        if client:
+            contexto = df.head(50).to_string()
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Executado", total_exec)
-        c2.metric("Pendente", total_pend)
-        c3.metric("Improdutivo", total_improd)
-        c4.metric("Eficiência", f"{eficiencia:.1f}%")
+            resposta = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Você é um analista de dados especialista em produtividade operacional."},
+                    {"role": "user", "content": f"Dados:\n{contexto}\n\nPergunta: {pergunta}"}
+                ]
+            )
 
-    else:
-        st.warning("⚠️ Não consegui identificar todas as colunas principais")
+            st.success(resposta.choices[0].message.content)
 
-    st.divider()
-
-    # Gráfico geral
-    st.subheader("📊 Gráfico Geral")
-
-    try:
-        resumo = df.select_dtypes(include='number').sum()
-        st.bar_chart(resumo)
-    except:
-        st.warning("Não foi possível gerar gráfico")
-
-    # Ranking
-    if col_tecnico and col_prod:
-        st.divider()
-        st.subheader("🏆 Ranking de Técnicos")
-
-        ranking = df.groupby(col_tecnico)[col_prod].sum().sort_values(ascending=False)
-        st.bar_chart(ranking)
-
-        melhor = ranking.idxmax()
-        pior = ranking.idxmin()
-
-        st.success(f"🥇 Melhor desempenho: {melhor}")
-        st.error(f"⚠️ Pior desempenho: {pior}")
-
-    st.divider()
-
-    # Insight automático
-    st.subheader("🧠 Insight Inteligente")
-
-    try:
-        if total_improd > total_exec:
-            st.error("Alerta: improdutividade maior que execução!")
-        elif eficiencia > 80:
-            st.success("Operação com alta performance 🚀")
         else:
-            st.warning("Há oportunidades de melhoria na operação")
-    except:
-        st.info("Envie uma planilha completa para insights")
+            st.warning("⚠️ IA não configurada ainda (precisa da API)")
